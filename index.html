@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Анализ воды</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #F0F0F0; margin: 20px; }
+        .block { background: #fff; border-radius: 15px; margin: 0 auto; padding: 20px; width: 90%; max-width: 400px; box-shadow: 0 2px 6px #0002; }
+    </style>
+</head>
+<body>
+    <div class="block">
+        <h2>Качество воды</h2>
+        <p>До фильтра: <span id="before">—</span> ppm</p>
+        <p>После фильтра: <span id="after">—</span> ppm</p>
+        <p>Очистка: <span id="purity">—</span>%</p>
+        <p>Комментарий: <span id="comment">—</span></p>
+        <button onclick="closeApp()">Закрыть</button>
+    </div>
+    <script>
+        // Здесь можно получить данные через fetch с вашего API
+        // Для примера, подставим фиктивные данные:
+        const before = 400;
+        const after = 35;
+        const purity = Math.round((before - after) / before * 100);
+        document.getElementById('before').innerText = before;
+        document.getElementById('after').innerText = after;
+        document.getElementById('purity').innerText = purity;
+        document.getElementById('comment').innerText = purity > 80 ? 'Фильтр эффективен' : 'Пора менять фильтр';
+
+        function closeApp() {
+            Telegram.WebApp.close();
+        }
+    </script>
+</body>
+</html>
