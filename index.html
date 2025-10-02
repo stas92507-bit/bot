@@ -11,23 +11,34 @@
       min-height: 100vh; font-family: 'Segoe UI', Verdana, sans-serif;
       color: #094e68; padding: 0; margin: 0;
     }
-    .container { max-width: 420px; margin: 36px auto 0 auto; background: rgba(255,255,255,0.86);
+    .container { max-width: 460px; margin: 36px auto 0 auto; background: rgba(255,255,255,0.90);
       border-radius: 22px; box-shadow: 0 6px 24px #0bc7b533; padding: 28px 12px 18px 12px;}
     h2 { text-align: center; color: #1287a8; font-weight: 700; margin-bottom: 9px; }
+    .actions {display: flex; gap: 10px; justify-content: space-between;}
     .chartbox { margin:18px 0; background: #e8faf6; border-radius: 14px; padding: 10px 4px; box-shadow: 0 2px 10px #62e6c144;}
     table { width:100%; margin-top:10px;}
-    td,th {text-align:center; padding: 5px 0;}
+    td, th {text-align:center; padding: 5px 0;}
     th {color:#138c7c;}
     .empty {text-align:center; margin:18px 0;}
-    button {margin-top:20px; width:100%; background: linear-gradient(90deg, #2ee7ff 0, #7afe97 80%);
-      color: #044c54; font-size: 17px; padding: 14px; border-radius: 16px; border: none;
-      font-weight: 700; box-shadow: 0 2px 8px #46e7be33; cursor:pointer; transition:.1s;}
+    button {background: linear-gradient(90deg, #2ee7ff 0, #49ffea 80%); color: #044c54; font-size: 14px; padding: 10px 12px;
+      border-radius: 10px; border: none; font-weight: 700; cursor:pointer; box-shadow: 0 2px 8px #46e7be33; transition:.1s;}
     button:active {filter:brightness(0.92);}
+    .closebtn { margin-top:22px; width: 100%; font-size: 17px;}
+    .sidebtn {font-size:13px; padding:7px 16px;}
+    .filters-list {margin-top:30px;}
+    .filters-list h3 {font-size:17px; color:#087d81; margin-bottom:5px;}
+    .filters-table th {font-size:14px;}
+    .filters-table td {font-size:13px;}
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>💧Качество воды<br><span style="font-size:14px;font-weight:400;color:#1ca289">данные со скважины</span></h2>
+    <h2>💧Качество воды — мини-приложение</h2>
+    
+    <div class="actions">
+      <span></span>
+      <button class="sidebtn" onclick="clearData();">Сбросить графики</button>
+    </div>
     <div class="chartbox"><canvas id="waterChart"></canvas></div>
     <div class="chartbox"><canvas id="filterChart"></canvas></div>
     <table border="0">
@@ -41,48 +52,109 @@
       </thead>
       <tbody id="dataRows"></tbody>
     </table>
-    <div class="empty" id="noDataRow" style="display:none;">Данные не найдены</div>
-    <button onclick="Telegram.WebApp.close();">Закрыть мини-приложение</button>
+    <div class="empty" id="noDataRow" style="display:none;">Данных нет — соединение с сервером отсутствует.</div>
+    
+    <div class="filters-list">
+      <h3>Таблица фильтров</h3>
+      <table class="filters-table" border="0">
+        <thead>
+          <tr>
+            <th>Фильтр</th>
+            <th>Срок службы (дней)</th>
+            <th>Средн. эффективность (%)</th>
+          </tr>
+        </thead>
+        <tbody id="filtersRows">
+          <!-- Будет заполняться скриптом -->
+        </tbody>
+      </table>
+    </div>
+    <button class="closebtn" onclick="Telegram.WebApp.close();">Закрыть мини-приложение</button>
   </div>
   
   <script>
-    const DATA_API_URL = "https://ваш_сервер/data.json"; // <-- Укажите тут реальный адрес
+    // Адрес, откуда забираются данные (массив замеров, который формирует ваша Ардуино или сервер)
+    const DATA_API_URL = "https://ваш_сервер/data.json"; // Указать адрес своей API
 
-    // --- Загрузка и отображение данных ---
+    // Симуляция фильтров в отсутствие реального списка фильтров с сервера
+    let filtersMeta = [
+      {name: "Гейзер БИО", start: "2024-05-10", end: "2024-06-01"},
+      {name: "Барьер Стандарт", start: "2024-06-02", end: "2024-06-20"},
+    ];
+    // Можно расширить структуру под ваши реальные фильтры и даты
+
+    // --- Глобальные переменные для графиков
     let waterChartInst, filterChartInst;
+    let currentData = [];
+
+    // --- Очистка данных в Local Storage и перезагрузка графиков (без влияния на сервер!)
+    function clearData() {
+      localStorage.removeItem('water_cache');
+      location.reload();
+    }
+
+    // --- Загрузка данных (кэшируем на 1 мин)
     async function loadData() {
       document.getElementById('noDataRow').style.display = 'none';
       let data = [];
+      let fromCache = false;
       try {
-        const response = await fetch(DATA_API_URL);
-        data = await response.json();
+        // (кэширование во избежание повторных запросов)
+        const stored = localStorage.getItem('water_cache');
+        const storeTime = localStorage.getItem('water_cache_time');
+        const now = Date.now();
+        if (stored && storeTime && now - Number(storeTime) < 60000) {
+          data = JSON.parse(stored);
+          fromCache = true;
+        } else {
+          const response = await fetch(DATA_API_URL);
+          data = await response.json();
+          localStorage.setItem('water_cache', JSON.stringify(data));
+          localStorage.setItem('water_cache_time', now.toString());
+        }
       } catch (e) {
         document.getElementById('noDataRow').style.display = 'block';
-        return;
+        // будет пустой массив, чтобы графики тоже строились (пустыми)
       }
-      // Таблица:
+      currentData = Array.isArray(data) ? data : [];
+      renderAll();
+    }
+
+    // --- Отрисовка таблицы и графиков даже если данных нет ---
+    function renderAll() {
+      // --- Таблица замеров ---
+      const data = currentData;
       const table = document.getElementById('dataRows');
       table.innerHTML = "";
-      if (!data.length) {
+      if(!data.length) {
         document.getElementById('noDataRow').style.display = 'block';
       } else {
+        document.getElementById('noDataRow').style.display = 'none';
         data.forEach(d => {
           let effect = d.before > 0 ? Math.round((1-d.after/d.before)*100) : 0;
           table.innerHTML += `<tr>
-            <td>${d.date.split('-').reverse().join('.')}</td>
-            <td>${d.before}</td>
-            <td>${d.after}</td>
+            <td>${d.date && d.date.split('-').reverse().join('.')}</td>
+            <td>${d.before ?? ""}</td>
+            <td>${d.after ?? ""}</td>
             <td>${effect}</td>
           </tr>`;
         });
       }
-      // Данные для графиков:
-      const days = data.map(d => d.date.split('-').reverse().join('.'));
+      // Графики
+      drawCharts(data);
+
+      // Таблица фильтров (пример: группировка по фильтрам, если есть)
+      renderFiltersTable(data);
+    }
+
+    // --- Графики ---
+    function drawCharts(data) {
+      // Если данных нет — всё равно рисуем пустые графики
+      const days = data.map(d => d.date && d.date.split('-').reverse().join('.'));
       const before = data.map(d => d.before);
       const after = data.map(d => d.after);
       const effect = data.map((d, i)=>d.before > 0 ? Math.round((1-d.after/d.before)*100) : 0);
 
-      // Первый график: после/до фильтра
       if(!waterChartInst) {
         waterChartInst = new Chart(document.getElementById('waterChart').getContext('2d'), {
           type: 'line',
@@ -94,8 +166,7 @@
             title:{ display:true, text:'Показания воды', color:'#138c7c', font:{weight:'bold',size:17} },
             legend:{labels:{color:'#1287a8'}}
           },
-          scales: { y: { beginAtZero:true, color: '#1287a8', grid: {color:'#baf5ea'} },
-                    x: {ticks:{color:'#1287a8'}} }
+          scales: { y: { beginAtZero:true, color: '#1287a8', grid: {color:'#baf5ea'}, suggestedMax:500 }, x: {ticks:{color:'#1287a8'}} }
         }});
       } else {
         waterChartInst.data.labels = days;
@@ -103,8 +174,6 @@
         waterChartInst.data.datasets[1].data = before;
         waterChartInst.update();
       }
-
-      // Второй график: эффективность
       if(!filterChartInst) {
         filterChartInst = new Chart(document.getElementById('filterChart').getContext('2d'), {
           type: 'bar',
@@ -123,6 +192,31 @@
         filterChartInst.update();
       }
     }
+
+    // --- Таблица фильтров ---
+    function renderFiltersTable(data) {
+      const tbody = document.getElementById('filtersRows');
+      tbody.innerHTML = "";
+      // В этом примере — фильтр меняется вручную по датам. Можно реализовать логику под ваши API!
+      filtersMeta.forEach(filter => {
+        // Расчёт срока службы этого фильтра:
+        const start = filter.start, end = filter.end;
+        const days = Math.round((new Date(end)-new Date(start))/(24*60*60*1000))+1;
+        // Берём только те замеры, что попали в срок этого фильтра
+        const filData = data.filter(d => d.date >= start && d.date <= end);
+        // Средняя эффективность
+        let eff = filData.length ? Math.round(
+          filData.map(d => 100*(1-d.after/d.before))
+                .reduce((a,b)=>a+b,0) / filData.length
+          ) : 0;
+        tbody.innerHTML += `<tr>
+          <td>${filter.name}</td>
+          <td>${days}</td>
+          <td>${eff}</td>
+        </tr>`;
+      });
+    }
+
     window.onload = loadData;
   </script>
 </body>
