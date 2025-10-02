@@ -8,81 +8,66 @@
   <style>
     body {
       background: linear-gradient(120deg, #45c4e6, #32e6aa 80%, #4f8cfb 100%);
-      min-height: 100vh;
-      font-family: 'Segoe UI', Verdana, sans-serif;
+      min-height: 100vh; font-family: 'Segoe UI', Verdana, sans-serif;
       color: #094e68; padding: 0; margin: 0;
     }
-    .container {
-      max-width: 420px; margin: 36px auto 0 auto;
-      background: rgba(255,255,255,0.86);
-      border-radius: 22px; box-shadow: 0 6px 24px #0bc7b533;
-      padding: 28px 12px 18px 12px;
-    }
+    .container { max-width: 420px; margin: 36px auto 0 auto; background: rgba(255,255,255,0.86);
+      border-radius: 22px; box-shadow: 0 6px 24px #0bc7b533; padding: 28px 12px 18px 12px;}
     h2 { text-align: center; color: #1287a8; font-weight: 700; margin-bottom: 9px; }
-    form { display: flex; gap: 6px; margin-bottom: 22px; flex-wrap: wrap; align-items:end; background: #3daeae11; border-radius:14px; padding:7px 10px;}
-    form input[type=number] { width: 82px; border-radius: 7px; padding: 6px 7px; border: 1px solid #45c4e6; margin-right: 6px; font-size: 15px;}
-    form button { background: linear-gradient(90deg, #2ee7ff 0, #7afe97 80%); color: #044c54; font-size: 14px; padding: 10px 12px; border-radius: 10px; border: none; font-weight: 700; cursor:pointer;}
     .chartbox { margin:18px 0; background: #e8faf6; border-radius: 14px; padding: 10px 4px; box-shadow: 0 2px 10px #62e6c144;}
     table { width:100%; margin-top:10px;}
     td,th {text-align:center; padding: 5px 0;}
     th {color:#138c7c;}
     .empty {text-align:center; margin:18px 0;}
-    button.closebtn {margin-top:20px;}
+    button {margin-top:20px; width:100%; background: linear-gradient(90deg, #2ee7ff 0, #7afe97 80%);
+      color: #044c54; font-size: 17px; padding: 14px; border-radius: 16px; border: none;
+      font-weight: 700; box-shadow: 0 2px 8px #46e7be33; cursor:pointer; transition:.1s;}
+    button:active {filter:brightness(0.92);}
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>💧Качество воды<br><span style="font-size:14px;font-weight:400;color:#1ca289">ежедневный учёт</span></h2>
-    <form id="addForm">
-      <input type="date" id="date" required value="">
-      <input type="number" min="1" max="5000" placeholder="До фильтра (ppm)" id="before" required>
-      <input type="number" min="0" max="5000" placeholder="После фильтра (ppm)" id="after" required>
-      <button type="submit">Добавить</button>
-    </form>
+    <h2>💧Качество воды<br><span style="font-size:14px;font-weight:400;color:#1ca289">данные со скважины</span></h2>
     <div class="chartbox"><canvas id="waterChart"></canvas></div>
     <div class="chartbox"><canvas id="filterChart"></canvas></div>
-
     <table border="0">
       <thead>
         <tr>
           <th>Дата</th>
-          <th>До</th>
-          <th>После</th>
-          <th>Эффект., %</th>
+          <th>До (ppm)</th>
+          <th>После (ppm)</th>
+          <th>Эффект. (%)</th>
         </tr>
       </thead>
       <tbody id="dataRows"></tbody>
     </table>
-    <div class="empty" id="noDataRow" style="display:none;">Данные отсутствуют. Введите новое измерение!</div>
-    <button class="closebtn" onclick="Telegram.WebApp.close();">Закрыть мини-приложение</button>
+    <div class="empty" id="noDataRow" style="display:none;">Данные не найдены</div>
+    <button onclick="Telegram.WebApp.close();">Закрыть мини-приложение</button>
   </div>
   
   <script>
-    // --- Работаем с localStorage ---
-    function getWaterData() {
-      return JSON.parse(localStorage.getItem('water_data') || '[]');
-    }
-    function saveWaterData(arr) {
-      localStorage.setItem('water_data', JSON.stringify(arr));
-    }
-    function addMeasurement(date, before, after) {
-      let arr = getWaterData();
-      arr.push({date, before, after});
-      arr = arr.sort((a,b)=>a.date.localeCompare(b.date));
-      saveWaterData(arr);
-    }
+    const DATA_API_URL = "https://ваш_сервер/data.json"; // <-- Укажите тут реальный адрес
 
-    // --- Отрисовка таблицы измерений и графиков ---
-    function renderAll() {
-      const data = getWaterData();
+    // --- Загрузка и отображение данных ---
+    let waterChartInst, filterChartInst;
+    async function loadData() {
+      document.getElementById('noDataRow').style.display = 'none';
+      let data = [];
+      try {
+        const response = await fetch(DATA_API_URL);
+        data = await response.json();
+      } catch (e) {
+        document.getElementById('noDataRow').style.display = 'block';
+        return;
+      }
+      // Таблица:
       const table = document.getElementById('dataRows');
       table.innerHTML = "";
-      if(data.length === 0) {
+      if (!data.length) {
         document.getElementById('noDataRow').style.display = 'block';
       } else {
-        document.getElementById('noDataRow').style.display = 'none';
         data.forEach(d => {
-          let effect = d.before>0 ? Math.round((1-d.after/d.before)*100) : 0;
+          let effect = d.before > 0 ? Math.round((1-d.after/d.before)*100) : 0;
           table.innerHTML += `<tr>
             <td>${d.date.split('-').reverse().join('.')}</td>
             <td>${d.before}</td>
@@ -91,72 +76,54 @@
           </tr>`;
         });
       }
+      // Данные для графиков:
+      const days = data.map(d => d.date.split('-').reverse().join('.'));
+      const before = data.map(d => d.before);
+      const after = data.map(d => d.after);
+      const effect = data.map((d, i)=>d.before > 0 ? Math.round((1-d.after/d.before)*100) : 0);
 
-      // Подготовка данных для графиков:
-      const days = data.map(d=>d.date.split('-').reverse().join('.'));
-      const before = data.map(d=>d.before);
-      const after = data.map(d=>d.after);
-      const effect = data.map((d,i)=>d.before>0 ? Math.round((1-d.after/d.before)*100) : 0);
-
-      // Первый график: после фильтра
-      waterChartInst.data.labels = days;
-      waterChartInst.data.datasets[0].data = after;
-      waterChartInst.data.datasets[1].data = before;
-      waterChartInst.update();
+      // Первый график: после/до фильтра
+      if(!waterChartInst) {
+        waterChartInst = new Chart(document.getElementById('waterChart').getContext('2d'), {
+          type: 'line',
+          data: { labels: days, datasets: [
+            { label: 'После фильтра (ppm)', data: after, fill:true, borderColor:'#3ac8f7', backgroundColor:'rgba(54, 240, 247, 0.17)', pointBackgroundColor:'#17fa96', tension:0.38, order:2 },
+            { label: 'До фильтра (ppm)', data: before, fill:false, borderColor:'#0addb7', backgroundColor:'#d0fff0', pointBackgroundColor:'#1ad1a9', tension:0.29, borderDash:[6,6], order:1 }
+          ]},
+          options: { plugins: {
+            title:{ display:true, text:'Показания воды', color:'#138c7c', font:{weight:'bold',size:17} },
+            legend:{labels:{color:'#1287a8'}}
+          },
+          scales: { y: { beginAtZero:true, color: '#1287a8', grid: {color:'#baf5ea'} },
+                    x: {ticks:{color:'#1287a8'}} }
+        }});
+      } else {
+        waterChartInst.data.labels = days;
+        waterChartInst.data.datasets[0].data = after;
+        waterChartInst.data.datasets[1].data = before;
+        waterChartInst.update();
+      }
 
       // Второй график: эффективность
-      filterChartInst.data.labels = days;
-      filterChartInst.data.datasets[0].data = effect;
-      filterChartInst.update();
-    }
-
-    // --- Работа с формой добавления ---
-    document.getElementById('addForm').onsubmit = ev => {
-      ev.preventDefault();
-      let date = document.getElementById('date').value;
-      let before = parseInt(document.getElementById('before').value);
-      let after = parseInt(document.getElementById('after').value);
-      if (!date || isNaN(before)|| isNaN(after)) return;
-      addMeasurement(date, before, after);
-      renderAll();
-      ev.target.reset();
-      document.getElementById('date').value = new Date().toISOString().slice(0,10);
-    }
-
-    // --- Настройка и создание графиков с Chart.js ---
-    const waterChartInst = new Chart(document.getElementById('waterChart').getContext('2d'), {
-      type: 'line',
-      data: { labels: [], datasets: [
-        { label: 'После фильтра (ppm)', data:[], fill:true, borderColor:'#3ac8f7', backgroundColor:'rgba(54, 240, 247, 0.17)', pointBackgroundColor:'#17fa96', tension:0.38, order:2 },
-        { label: 'До фильтра (ppm)', data:[], fill:false, borderColor:'#0addb7', backgroundColor:'#d0fff0', pointBackgroundColor:'#1ad1a9', tension:0.29, borderDash:[6,6], order:1 }
-      ]},
-      options: {
-        plugins: {
-          title: { display:true, text:'Показания воды', color:'#138c7c', font:{weight:'bold',size:17} },
-          legend: {labels:{color:'#1287a8'}}
-        },
-        scales: { y: { beginAtZero:true, color: '#1287a8', grid: {color:'#baf5ea'} },
-                  x: {ticks:{color:'#1287a8'}} }
+      if(!filterChartInst) {
+        filterChartInst = new Chart(document.getElementById('filterChart').getContext('2d'), {
+          type: 'bar',
+          data: { labels:days, datasets: [
+            { label: 'Эффективность (%)', data:effect, backgroundColor:'#17fa96', borderRadius:7 }
+          ]},
+          options: { plugins: {
+            title:{ display:true, text:'Эффективность фильтра', color:'#1d858b', font:{weight:'bold',size:17} },
+            legend:{display:false}
+          }, 
+          scales: {y:{beginAtZero:true,max:100, color:'#08956a', grid:{color:'#cafef8'}}, x:{ticks:{color:'#08956a'}} }
+        }});
+      } else {
+        filterChartInst.data.labels = days;
+        filterChartInst.data.datasets[0].data = effect;
+        filterChartInst.update();
       }
-    });
-
-    const filterChartInst = new Chart(document.getElementById('filterChart').getContext('2d'), {
-      type: 'bar',
-      data: { labels:[], datasets:[
-        { label: 'Эффективность (%)', data:[], backgroundColor:'#17fa96', borderRadius:7 }
-      ]},
-      options: {
-        plugins: { title:{ display:true, text:'Эффективность фильтрации', color:'#1d858b', font:{weight:'bold',size:17} }, legend: {display:false} },
-        scales: {y:{beginAtZero:true, max:100, color:'#08956a', grid:{color:'#cafef8'}}, x:{ticks:{color:'#08956a'}} }
-      }
-    });
-
-    // --- Запуск начального рендеринга ---
-    window.onload = ()=>{
-      // Устанавливаем сегодняшнюю дату по умолчанию в форму:
-      document.getElementById('date').value = new Date().toISOString().slice(0,10);
-      renderAll();
     }
+    window.onload = loadData;
   </script>
 </body>
 </html>
