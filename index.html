@@ -63,9 +63,15 @@
     <div class="actions">
       <button class="sidebtn" onclick="clearAllData();">Сбросить всё</button>
     </div>
-
     <div class="chartbox"><canvas id="waterChart"></canvas></div>
     <div class="chartbox"><canvas id="filterChart"></canvas></div>
+
+    <!-- График на сегодня -->
+    <div class="chartbox" id="todayChartBox" style="display:none;">
+      <h4 style="margin:0 0 7px 0;text-align:center;color:#099;">Сегодня</h4>
+      <canvas id="todayChart"></canvas>
+      <div id="todayNoData" style="color:#ca0;text-align:center;display:none;">Нет данных за сегодня.</div>
+    </div>
 
     <h3 style="color:#087d81;font-size:16px;margin-top:15px;margin-bottom:4px;">История замеров</h3>
     <table>
@@ -99,7 +105,7 @@
   </div>
   
   <script>
-    // ХРАНЕНИЕ И ДОБАВЛЕНИЕ ЗАМЕРОВ ВОДЫ
+    // --- Работа с замерами воды ---
     function getWaterData() {
       return JSON.parse(localStorage.getItem('water_data') || '[]');
     }
@@ -113,7 +119,7 @@
       saveWaterData(arr);
     }
 
-    // ХРАНЕНИЕ И ДОБАВЛЕНИЕ ФИЛЬТРОВ
+    // --- Работа с фильтрами ---
     function getFilters() {
       return JSON.parse(localStorage.getItem('filters_list') || '[]');
     }
@@ -132,7 +138,7 @@
       window.location.reload();
     }
 
-    // ГРАФИКИ
+    // --- ГРАФИКИ ---
     let waterChartInst, filterChartInst;
     function drawCharts() {
       const data = getWaterData();
@@ -180,9 +186,37 @@
       }
     }
 
-    // ВЫВОД ТАБЛИЦ
+    // --- ГРАФИК ЗА СЕГОДНЯ ---
+    function drawTodayChart() {
+      const data = getWaterData();
+      const todayStr = new Date().toISOString().slice(0,10);
+      const todayEntry = data.find(d => d.date === todayStr);
+      const todayBox = document.getElementById('todayChartBox');
+      const noDataDiv = document.getElementById('todayNoData');
+      if (!todayEntry) {
+        todayBox.style.display = 'block';
+        document.getElementById('todayChart').style.display = 'none';
+        noDataDiv.style.display = 'block';
+        return;
+      }
+      todayBox.style.display = 'block';
+      noDataDiv.style.display = 'none';
+      document.getElementById('todayChart').style.display = 'block';
+      if (window.todayChartInst) { window.todayChartInst.destroy(); }
+      window.todayChartInst = new Chart(document.getElementById('todayChart').getContext('2d'), {
+        type: 'bar',
+        data: {labels: ['До', 'После'], datasets: [
+          {label: 'ppm', data: [todayEntry.before, todayEntry.after], backgroundColor:['#2BAFE8','#36EAA9']}
+        ]},
+        options: {
+          plugins: {title:{display:false}},
+          scales: {y:{beginAtZero:true,suggestedMax:500,color:'#087d81'}}
+        }
+      });
+    }
+
+    // --- ВЫВОД ДАННЫХ ---
     function renderAll() {
-      // таблица замеров
       const data = getWaterData();
       const table = document.getElementById('dataRows');
       table.innerHTML = "";
@@ -201,6 +235,7 @@
         });
       }
       drawCharts();
+      drawTodayChart();
 
       // таблица фильтров
       const filters = getFilters();
@@ -227,6 +262,7 @@
       }
     }
 
+    // --- Обработка форм ---
     document.getElementById('addWaterForm').onsubmit = ev => {
       ev.preventDefault();
       let date = document.getElementById('date').value;
