@@ -12,7 +12,7 @@
       font-family: 'Segoe UI', Verdana, sans-serif;
       color: #094e68; padding: 0; margin: 0;
     }
-    .container { max-width: 470px; margin: 30px auto 0 auto; background: rgba(255,255,255,0.93);
+    .container { max-width: 470px; margin: 30px auto 0 auto; background: rgba(255,255,255,0.95);
       border-radius: 22px; box-shadow: 0 6px 24px #0bc7b533; padding: 23px 12px 18px 12px;}
     h2 { text-align: center; color: #1287a8; font-weight: 700; margin-bottom: 9px; }
     .formbox, .filterbox {background: #e7fefb; padding:10px 10px 7px 10px; border-radius:12px; margin-bottom: 12px;}
@@ -21,9 +21,7 @@
     input[type='number'], input[type='date'], input[type='text'] {
       border-radius:7px; border:1px solid #49b8b9; padding:6px 7px; font-size:15px; outline:none;
     }
-    button, .btn {background: linear-gradient(90deg, #2ee7ff 0%, #24cb93 100%);
-      color: #094e68; border: none; border-radius: 10px; padding: 8px 15px;
-      font-size: 15px; font-weight: bold; margin-right:6px; cursor:pointer;transition:.1s;}
+    button, .btn { font-size: 15px; font-weight: bold; margin-right:6px; cursor:pointer;transition:.1s;}
     .formbox button, .filterbox button {padding: 7px 13px;font-size:13px;}
     button:active, .btn:active {filter: brightness(0.93);}
     .actions {display: flex; justify-content: flex-end; margin-bottom: 4px;}
@@ -34,6 +32,12 @@
     th {color:#138c7c;}
     .empty {text-align:center; margin:15px 0; color: #08956a;}
     .closebtn { margin-top:22px; width: 100%; font-size: 17px;}
+    #todayNums {display:flex; justify-content: center; gap:36px; margin: 18px 0 10px 0;}
+    #todayNums .numblock {text-align:center;}
+    #todayNums .numlabel {color:#27a1fd;font-size:13px;}
+    #todayNums .numlabel.after {color:#22be9e;}
+    #todayNums .num {font-size:33px;padding:7px 0;color:#1b34a6;font-weight: bold;}
+    #todayNums .num.after {color:#0d946d;}
   </style>
 </head>
 <body>
@@ -63,12 +67,25 @@
     <div class="actions">
       <button class="sidebtn" onclick="clearAllData();">Сбросить всё</button>
     </div>
+
+    <!-- Крупные данные за сегодня -->
+    <div id="todayNums">
+      <div class="numblock">
+        <div class="numlabel">До фильтра</div>
+        <div id="numBefore" class="num">—</div>
+      </div>
+      <div class="numblock">
+        <div class="numlabel after">После фильтра</div>
+        <div id="numAfter" class="num after">—</div>
+      </div>
+    </div>
+
     <div class="chartbox"><canvas id="waterChart"></canvas></div>
     <div class="chartbox"><canvas id="filterChart"></canvas></div>
 
-    <!-- График на сегодня -->
+    <!-- График за сегодня -->
     <div class="chartbox" id="todayChartBox" style="display:none;">
-      <h4 style="margin:0 0 7px 0;text-align:center;color:#099;">Сегодня</h4>
+      <h4 style="margin:0 0 7px 0;text-align:center;color:#099;">Сегодня: график</h4>
       <canvas id="todayChart"></canvas>
       <div id="todayNoData" style="color:#ca0;text-align:center;display:none;">Нет данных за сегодня.</div>
     </div>
@@ -136,6 +153,15 @@
       localStorage.removeItem('water_data');
       localStorage.removeItem('filters_list');
       window.location.reload();
+    }
+
+    // --- Крупные цифры дня
+    function updateTodayNums() {
+      const data = getWaterData();
+      const todayStr = new Date().toISOString().slice(0,10);
+      const todayEntry = data.find(d => d.date === todayStr);
+      document.getElementById('numBefore').innerText = todayEntry ? todayEntry.before : "—";
+      document.getElementById('numAfter').innerText = todayEntry ? todayEntry.after : "—";
     }
 
     // --- ГРАФИКИ ---
@@ -221,26 +247,7 @@
       const table = document.getElementById('dataRows');
       table.innerHTML = "";
       if(!data.length) {
-        document.getElementById('noDataRow').style.display = 'block';
-      } else {
-        document.getElementById('noDataRow').style.display = 'none';
-        data.forEach(d => {
-          let effect = d.before > 0 ? Math.round((1-d.after/d.before)*100) : 0;
-          table.innerHTML += `<tr>
-            <td>${d.date && d.date.split('-').reverse().join('.')}</td>
-            <td>${d.before ?? ""}</td>
-            <td>${d.after ?? ""}</td>
-            <td>${effect}</td>
-          </tr>`;
-        });
-      }
-      drawCharts();
-      drawTodayChart();
-
-      // таблица фильтров
-      const filters = getFilters();
-      const ftable = document.getElementById('filtersRows');
-      ftable.innerHTML = '';
+        document.getElementById('      ftable.innerHTML = '';
       if (!filters.length) {
         document.getElementById('noFilterRow').style.display='block';
       } else {
@@ -256,8 +263,7 @@
           ftable.innerHTML += `<tr>
             <td>${filter.name}</td>
             <td>${days}</td>
-            <td>${eff}</td>
-          </tr>`;
+            <td>${          </tr>`;
         });
       }
     }
